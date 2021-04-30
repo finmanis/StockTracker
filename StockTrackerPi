@@ -1,0 +1,149 @@
+import finnhub
+import time
+import digitalio
+import board
+from PIL import Image, ImageDraw, ImageFont
+import adafruit_rgb_display.st7789 as st7789
+from datetime import datetime
+
+finnC = finnhub.Client(api_key="c1sh2daad3i9o8ualtkg")
+
+
+cs_pin = digitalio.DigitalInOut(board.CE0)
+dc_pin = digitalio.DigitalInOut(board.D25)
+reset_pin = None
+
+BAUDRATE = 64000000
+ 
+spi = board.SPI()
+
+
+disp = st7789.ST7789(
+    spi,
+    cs=cs_pin,
+    dc=dc_pin,
+    rst=reset_pin,
+    baudrate=BAUDRATE,
+    width=240,
+    height=240,
+    x_offset=0,
+    y_offset=80,
+)
+
+height = disp.width
+width = disp.height
+image = Image.new("RGB", (width, height))
+rotation = 180
+
+draw = ImageDraw.Draw(image)
+ 
+
+padding = 0
+top = padding
+bottom = height - padding
+
+font2 =
+ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+48) font =
+ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+24)
+
+backlight = digitalio.DigitalInOut(board.D22)
+backlight.switch_to_output()
+backlight.value = True
+
+
+def priceGet(symbol, per):
+    x=5
+    y=-5
+    draw.rectangle((0, 0, width, height), outline=0, fill=0)
+    draw.text((x,y),str(symbol) + ':', font=font2, fill=(255,255,255))
+    
+    cost = finnC.quote(symbol)
+    price = finnC.aggregate_indicator(symbol, per)
+    costy = cost['c']
+    
+    x=5
+    y=45
+    draw.text((x,y),'Price: '+str(costy), font=font, fill=(255,255,255))
+    
+    techA = price['technicalAnalysis']
+    rec = techA['count']
+    
+    diffBuy = rec['buy']-(rec['neutral']+rec['sell'])
+    diffSell = rec['sell']-(rec['neutral']+rec['buy'])
+    diffNeutral = rec['neutral']-(rec['buy']+rec['sell'])
+    
+    trend = price['trend']
+    pctGain = (cost['c'] - cost['pc'])/cost['pc']*100
+    pctGain = round(pctGain, 2)
+    
+    x=5
+    y=70
+    if pctGain>0:
+        draw.text((x,y), '+' + str(pctGain) + '%', font=font,
+fill=(0,255,0)) else:
+        draw.text((x,y), str(pctGain) + '%', font=font, fill=(255,0,0))
+    
+    x=5
+    y=95
+    if trend['adx'] < 25:
+        draw.text((x,y),'ADX = ' + str(round(trend['adx'], 2)),
+font=font, fill=(255,0,0)) if 50 > trend['adx'] > 25:
+        draw.text((x,y),'ADX = ' + str(round(trend['adx'], 2)),
+font=font, fill=(255,170,0)) if 75 > trend['adx'] > 50:
+        draw.text((x,y),'ADX =' + str(round(trend['adx'], 2)),
+font=font, fill=(230,255,0)) if trend['adx'] > 75:
+        draw.text((x,y),'ADX =' + str(round(trend['adx'], 2)),
+font=font, fill=(0,255,0)) x=5
+    y=120
+    if rec['buy'] > rec['neutral']:
+        if rec['buy'] > rec['sell']:
+            if diffBuy > 1:
+                draw.text((x,y),'Strong Buy ' + str(diffBuy),
+font=font, fill=(0,255,0)) if -1 <= diffBuy <= 1:
+                draw.text((x,y),'Buy ' + str(diffBuy), font=font,
+fill=(150,255,0)) if diffBuy < -1:
+                draw.text((x,y),'Weak Buy ' + str(diffBuy), font=font,
+fill=(225,255,0))
+
+    x=5
+    y=120
+    if rec['sell'] > rec['neutral']:
+        if rec['sell'] > rec['buy']:
+            if diffSell > 1:
+                draw.text((x,y),'Strong Sell ' + str(diffSell),
+    font=font, fill=(255,0,0)) if -1 <= diffSell <= 1:
+                draw.text((x,y),'Sell ' + str(diffSell), font=font,
+    fill=(255,115,0)) if diffSell < -1:
+                draw.text((x,y),'Weak Sell ' + str(diffSell),
+    font=font, fill=(255,200,0)) 
+                
+    x=5
+    y=120
+    if rec['neutral'] > rec['sell']:
+        if rec['neutral'] > rec['buy']:
+            if diffNeutral > 1:
+                draw.text((x,y),'Strong Hold ' + str(diffNeutral),
+    font=font, fill=(255,255,0)) if -1 <= diffNeutral <= 1:
+                draw.text((x,y),'Hold ' + str(diffNeutral), font=font,
+    fill=(220,220,0)) if diffNeutral < -1:
+                draw.text((x,y),'Weak Hold ' + str(diffNeutral),
+    font=font, fill=(190,190,0)) x=5
+    y=185
+    dT = datetime.now()
+    time = dT.strftime('%H:%M')
+    draw.text((x,y), time,font=font, fill=(255,255,255))
+    
+    x=5
+    y=210
+    draw.text((x,y),'Period: Day',font=font, fill=(255,255,255))
+    disp.image(image, rotation)
+
+                          
+per = 'D'
+
+
+while True:
+    priceGet('AAPL', per)
+    time.sleep(120)
